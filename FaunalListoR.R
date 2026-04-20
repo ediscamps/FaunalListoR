@@ -409,17 +409,32 @@ server <- function(input, output, session) {
 #               as.matrix()
 #           }
           
-          selectizeInput(inputId = paste0("taxinput_", i),label = taxa_tofind[i], choices = tax_theso$LATIN, selected =                         
-                           case_when(    ##########CETTE PARTIE PERMET D'ATTRIBUER PAR DEFAUT LE Taxon le plus probable pour certains cas
+            
+            if(nrow(tax_corres) > 0){
+            first_corres <- as.character(tax_corres[1,])
+            print(tax_corres)
+            }
+            
+            if(nrow(tax_corres) == 0){
+              first_corres <- "NO CORRESPONDANCE FOUND"
+            }
+            
+            selectizeInput(inputId = paste0("taxinput_", i),label = taxa_tofind[i], choices = tax_theso$LATIN, options=list(create=TRUE),
+                           
+                           
+                           selected = case_when(    ##########CETTE PARTIE PERMET D'ATTRIBUER PAR DEFAUT LE Taxon le plus probable pour certains cas
                              "Equus caballus" %in% tax_corres ~ "Equus ferus",
+                             onetaxtofind == "Equus caballus" ~ "Equus ferus",
                              "Capra ibex" %in% tax_corres ~ "Capra ibex/pyrenaica",
                              "Rupicapra rupicapra" %in% tax_corres ~ "Rupicapra sp.",
                              "Cervus elaphus" %in% tax_corres ~ "Cervus elaphus",
-                             "Megaloceros giganteus" %in% tax_corres ~ "Megaloceros giganteus",
-                             .default = as.character(tax_corres[1,])),
-                         
-                         options=list(create=TRUE)
-          )
+                             # onetaxtofind == "Megaloceros giganteus" ~ "Megaloceros giganteus", #not working?
+                             # taxa_tofind[i] == "Mégacéros" ~ "Megaloceros giganteus", #not working?
+                             .default = first_corres
+                           )
+            )
+            
+          
         })
       )
     }
@@ -487,7 +502,6 @@ server <- function(input, output, session) {
     
     # pasting the new taxa names
     bigtable <- cbind(list_taxa_modified(), df_importedfile())
-    
     # getting the new occup names from the inputs
     occup_tofind <- list_occup_tofind()
     
@@ -515,7 +529,7 @@ server <- function(input, output, session) {
     
 
     # creating correspondences between original and new occup names, plus quanti types
-    old_occupnames <- colnames(bigtable[,-c(1,2)])
+    old_occupnames <- colnames(bigtable)[-c(1,2)]
     tabl_occupnames <- data.frame(cbind(old_occupnames, unlist(list_occup_modified()), unlist(list_quanti_types()))) %>%
       mutate(across(2, as.numeric)) #converting ids to numeric
     colnames(tabl_occupnames) <- c("occup_original","occup_id","quanti_type")
