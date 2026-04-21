@@ -36,8 +36,8 @@ con <- DBI::dbConnect(
   password = "tjiA8sc5Ac_oQXk5nTDYR"
 )
 
-BDA_sites <- DBI::dbGetQuery(con, 'SELECT * FROM "BDA"."sites"')
-BDA_occup <- DBI::dbGetQuery(con, 'SELECT * FROM "BDA"."occupations"')
+# BDA_sites <- DBI::dbGetQuery(con, 'SELECT * FROM "BDA"."sites"')
+# BDA_occup <- DBI::dbGetQuery(con, 'SELECT * FROM "BDA"."occupations"')
 
 ui_import <- fluidPage(
   tags$head(
@@ -67,7 +67,9 @@ ui_baseinfo <- fluidPage(
   
   textOutput("text_next_id_faunalstudy"),
   br(),
-  selectInput("selector_BDA_country", label ="Choose the country", choices = unique(BDA_sites$pays), selected = "France"),
+  selectInput("selector_BDA_country", label ="Choose the country", 
+              choices = "", 
+              selected = "France"),
   selectInput("selector_BDA_sites", label ="Choose the site", choices = ""),
   textOutput("id_site"),
   "If the site you're looking for is not present in this list, please first add it at https://bda.huma-num.fr/",
@@ -225,10 +227,24 @@ server <- function(input, output, session) {
   FaunalListoR_baseinfo <- reactive(read_excel("FaunalListoR_data.xlsx", sheet = "BaseInfo"))
   FaunalListoR_faunallists <- reactive(read_excel("FaunalListoR_data.xlsx", sheet = "FaunalLists"))
   
+  BDA_sites_reactive <- reactive(DBI::dbGetQuery(con, 'SELECT * FROM "BDA"."sites"'))
+  BDA_occup_reactive <- reactive(DBI::dbGetQuery(con, 'SELECT * FROM "BDA"."occupations"'))
+  
+  # observe({
+  # BDA_sites <- BDA_sites_reactive()
+  # BDA_occup <- BDA_occup_reactive()
+  # })
+  
   observeEvent(input$fetchBDA, {
     BDA_sites <- DBI::dbGetQuery(con, 'SELECT * FROM "BDA"."sites"')
     BDA_occup <- DBI::dbGetQuery(con, 'SELECT * FROM "BDA"."occupations"')
+    session$reload()
   }) ## ne marche pas bien, tout passer en reactive ?
+  
+  
+
+  
+  
   
   #creating empty containers
   df_importedfile <- reactiveVal(NULL)
@@ -245,15 +261,29 @@ server <- function(input, output, session) {
   df_faunalstudiesentered <- reactiveVal(NULL)
   
   BDA_selectsites <- reactive(
-    BDA_sites %>%
+    BDA_sites_reactive() %>%
       filter(pays == input$selector_BDA_country) %>%
       dplyr::select("nom_site","id_sites") %>%
       arrange(nom_site) %>%
       deframe() #pour creer une named list
   )
+  
+  country_list <- reactive(
+    unique(BDA_sites_reactive()$pays)
+  )
     
+  observe({
+    updateSelectInput(
+      session,
+      "selector_BDA_country",
+      choices = country_list(),
+    )
+  })
+  
+  
+  
   id_selectedsite <- reactive(
-    BDA_sites %>%
+    BDA_sites_reactive() %>%
       filter(id_sites == input$selector_BDA_sites) %>%
       dplyr::select("id_sites")%>%
       pull()
@@ -261,7 +291,7 @@ server <- function(input, output, session) {
   
   # getting the site name ## all of this is necessary because of duplicates in site names
   name_selectedsite <- reactive(
-    BDA_sites %>%
+    BDA_sites_reactive() %>%
       filter(id_sites == input$selector_BDA_sites) %>%
       dplyr::select("nom_site")%>%
       pull()
@@ -295,10 +325,10 @@ server <- function(input, output, session) {
   })
 
   output$table_BDA_sites = DT::renderDT({
-    BDA_sites
+    BDA_sites_reactive()
   })
   output$table_BDA_occup = DT::renderDT({
-    BDA_occup
+    BDA_occup_reactive()
   })
   output$table_FaunalListoR_baseinfo = DT::renderDT({
     FaunalListoR_baseinfo()
@@ -309,7 +339,7 @@ server <- function(input, output, session) {
   
   ### creating list of occupations for given site, and list of faunal lists previously entered
   observeEvent(input$selector_BDA_sites, {
-    x <- BDA_occup %>%
+    x <- BDA_occup_reactive() %>%
       filter(id_sites %in% id_selectedsite()) %>%
       dplyr::select("sequence","num_couche","id_occupations") %>%
       mutate(num_couche=replace(num_couche, is.na(num_couche), "no name in BDA")) %>% ##used to prevent bugs with NAs values
@@ -317,7 +347,7 @@ server <- function(input, output, session) {
     
     list_occup_BDA_withsequences(x)
     
-    y <- BDA_occup %>%
+    y <- BDA_occup_reactive() %>%
       filter(id_sites %in% id_selectedsite()) %>%
       dplyr::select("num_couche","id_occupations") %>%
       mutate(num_couche=replace(num_couche, is.na(num_couche), "no name in BDA")) ##used to prevent bugs with NAs values
