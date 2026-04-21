@@ -7,6 +7,7 @@ library(shinydashboard)
 require(openxlsx)
 library(tidyr)
 library(tibble) #pour deframe
+library(DBI)
 
 
 # tabl <- readxl::read_xlsx("docsumo_test1.xlsx")
@@ -22,12 +23,47 @@ library(tibble) #pour deframe
 # write.csv(taxmam, "TAXREF_mammalia.csv")
 
 tax_theso <- readxl::read_xlsx("tax_theso.xlsx")
-BDA_sites <- readxl::read_xlsx("BDA_sites.xlsx")
-BDA_occup <- readxl::read_xlsx("BDA_occup.xlsx")
+# BDA_sites <- readxl::read_xlsx("BDA_sites.xlsx")
+# BDA_occup <- readxl::read_xlsx("BDA_occup.xlsx")
 
+## connection a BDA
+con <- DBI::dbConnect(
+  RPostgres::Postgres(),
+  host = "postgresql17a.db.huma-num.fr",
+  dbname = "bdarcheo",
+  port = 5432,
+  user = "user_bdarcheo_read",
+  password = "tjiA8sc5Ac_oQXk5nTDYR"
+)
 
+BDA_sites <- DBI::dbGetQuery(con, 'SELECT * FROM "BDA"."sites"')
+BDA_occup <- DBI::dbGetQuery(con, 'SELECT * FROM "BDA"."occupations"')
+
+ui_import <- fluidPage(
+  tags$head(
+    tags$style(HTML("hr {border-top: 3px solid #000000;}"))
+  ),
+  hr(),
+  strong("Importing Data", style = "font-size:30px;"),
+  br(),
+  strong("To start, you need to import.xlsx file:"),br(),br(),
+  
+  fileInput("table_importedfile", "First, upload your data (.xlsx)", multiple = FALSE),
+  em("If you just want to explore the app, you can import a test dataset:"), 
+  checkboxInput("import_testdata", "Use test dataset instead of my own", value = FALSE),
+  hr(),
+  "You should provide a table with taxa as rows, and occupations (& quantification type) as columns.", br(),
+  strong("Make sure that every column as a unique name"), "(for example Layer 1 NISP, Layer 1 MNI, Layer 2 NISP, etc.)",br(),
+  strong("Make sure that every cell (e.g. NISP value) is a number, otherwise the information will be lost."),br(),
+  hr(),
+  
+  
+  DT::dataTableOutput("table_toimport")
+  
+)
 
 ui_baseinfo <- fluidPage(
+  actionButton("fetchBDA", "Click here to update BDA sites & occupations"),
   
   textOutput("text_next_id_faunalstudy"),
   br(),
@@ -68,28 +104,7 @@ ui_baseinfo <- fluidPage(
 )
 
 
-ui_import <- fluidPage(
-  tags$head(
-    tags$style(HTML("hr {border-top: 3px solid #000000;}"))
-  ),
-    hr(),
-  strong("Importing Data", style = "font-size:30px;"),
-  br(),
-  strong("To start, you need to import.xlsx file:"),br(),br(),
-  
-  fileInput("table_importedfile", "First, upload your data (.xlsx)", multiple = FALSE),
-  em("If you just want to explore the app, you can import a test dataset:"), 
-  checkboxInput("import_testdata", "Use test dataset instead of my own", value = FALSE),
-  hr(),
-  "You should provide a table with taxa as rows, and occupations (& quantification type) as columns.", br(),
-  strong("Make sure that every column as a unique name"), "(for example Layer 1 NISP, Layer 1 MNI, Layer 2 NISP, etc.)",br(),
-  strong("Make sure that every cell (e.g. NISP value) is a number, otherwise the information will be lost."),br(),
-  hr(),
-  
-  
-  DT::dataTableOutput("table_toimport")
 
-)
 
   
 ### bine indiquer que TABLEAU NE DOIT PAS CONTENIR DE LIGNES "total", ni de somme par familles
@@ -210,7 +225,10 @@ server <- function(input, output, session) {
   FaunalListoR_baseinfo <- reactive(read_excel("FaunalListoR_data.xlsx", sheet = "BaseInfo"))
   FaunalListoR_faunallists <- reactive(read_excel("FaunalListoR_data.xlsx", sheet = "FaunalLists"))
   
-  
+  observeEvent(input$fetchBDA, {
+    BDA_sites <- DBI::dbGetQuery(con, 'SELECT * FROM "BDA"."sites"')
+    BDA_occup <- DBI::dbGetQuery(con, 'SELECT * FROM "BDA"."occupations"')
+  }) ## ne marche pas bien, tout passer en reactive ?
   
   #creating empty containers
   df_importedfile <- reactiveVal(NULL)
@@ -226,25 +244,14 @@ server <- function(input, output, session) {
   df_baseinfo <- reactiveVal(NULL)
   df_faunalstudiesentered <- reactiveVal(NULL)
   
-  
   BDA_selectsites <- reactive(
     BDA_sites %>%
       filter(pays == input$selector_BDA_country) %>%
       dplyr::select("nom_site","id_sites") %>%
       arrange(nom_site) %>%
       deframe() #pour creer une named list
-  
   )
-  
-  # BDA_selectsites <- reactive(
-  #   BDA_sites %>%
-  #     filter(pays == input$selector_BDA_country) %>%
-  #     dplyr::select("nom_site","id_sites") %>%
-  #     deframe() #pour creer une named list
-  #   
-  # )
-  
-  
+    
   id_selectedsite <- reactive(
     BDA_sites %>%
       filter(id_sites == input$selector_BDA_sites) %>%
@@ -259,6 +266,7 @@ server <- function(input, output, session) {
       dplyr::select("nom_site")%>%
       pull()
   )
+
   
   output$id_site <- renderText(c("BDA ID number of the site:", id_selectedsite()))
   
@@ -478,11 +486,7 @@ server <- function(input, output, session) {
   })
   
   
-  
-  
-  
-  
-  
+
   
   
   
